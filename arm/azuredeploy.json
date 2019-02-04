@@ -1,0 +1,111 @@
+{
+    "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "containerImage": {
+            "type": "string",
+            "defaultValue": "dotjson/aci-tf:test"
+        }
+    },
+    "variables": {
+        "aciName": "[concat(resourceGroup().name, '-aci')]",
+        "identityName": "[concat(resourceGroup().name, '-identity')]",
+        "roleAssignmentId": "[guid(concat(resourceGroup().name, 'owner'))]",
+        "deploymentRoleDefinitionId": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Authorization/roleDefinitions/', '8e3af657-a8ff-443c-a75c-2fe8c4bcb635')]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+            "name": "[variables('identityName')]",
+            "apiVersion": "2015-08-31-preview",
+            "location": "[resourceGroup().location]"
+        },
+        {
+            "type": "Microsoft.Authorization/roleAssignments",
+            "apiVersion": "2017-05-01",
+            "name": "[variables('roleAssignmentId')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))]"
+            ],
+            "properties": {
+                "roleDefinitionId": "[variables('deploymentRoleDefinitionId')]",
+                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName')), '2015-08-31-preview').principalId]",
+                "scope": "[resourceGroup().id]"
+            }
+        },
+        {
+            "type": "Microsoft.ContainerInstance/containerGroups",
+            "apiVersion": "2018-10-01",
+            "name": "[variables('aciName')]",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))]",
+                "[resourceId('Microsoft.Authorization/roleAssignments', variables('roleAssignmentId'))]"
+            ],
+            "identity": {
+                "type": "UserAssigned",
+                "userAssignedIdentities": {
+                    "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))]": {}
+                }
+            },
+            "properties": {
+                "osType": "Linux",
+                "restartPolicy": "OnFailure",
+                "containers": [
+                    {
+                        "name": "terraform",
+                        "properties": {
+                            "image": "[parameters('containerImage')]",
+                            "environmentVariables": [
+                                {
+                                    "name": "ARM_SKIP_CREDENTIALS_VALIDATION",
+                                    "value": true
+                                },
+                                {
+                                    "name": "ARM_SKIP_PROVIDER_REGISTRATION",
+                                    "value": true
+                                },
+                                {
+                                    "name": "ARM_USE_MSI",
+                                    "value": true
+                                },
+                                {
+                                    "name": "ARM_MSI_ENDPOINT",
+                                    "value": "http://169.254.169.254/metadata/identity/oauth2/token"
+                                },
+                                {
+                                    "name": "ARM_SUBSCRIPTION_ID",
+                                    "value": "[subscription().subscriptionId]"
+                                },
+                                {
+                                    "name": "ARM_TENANT_ID",
+                                    "value": "[subscription().tenantId]"
+                                },
+                                {
+                                    "name": "TF_VAR_resourceGroupName",
+                                    "value": "[resourceGroup().name]"
+                                },
+                                {
+                                    "name": "TF_VAR_resourceGroupLocation",
+                                    "value": "[resourceGroup().location]"
+                                }
+                            ],
+                            "command": [
+                                "terraform",
+                                "apply",
+                                "-auto-approve"
+                            ],
+                            "resources": {
+                                "requests": {
+                                    "cpu": 1,
+                                    "memoryInGB": 1
+                                }
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+    ],
+    "outputs": {}
+}

@@ -1,0 +1,12 @@
+FROM hashicorp/terraform:light
+
+ENV ARM_SUBSCRIPTION_ID=""
+ENV CLIENT_ID=""
+ENV ARM_CLIENT_SECRET=""
+ENV ARM_TENANT_ID=""
+ENV ARM_ENVIRONMENT=""
+ENV USE_MSI=""
+
+COPY . .
+
+RUN terraform init
